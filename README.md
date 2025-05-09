@@ -1,3 +1,5 @@
+### Original: https://github.com/amauricio/junkshell
+
 # 🗑️ Junkshell: powershell shellcode loader
 Sometimes, you need a fast way to encode your shellcode and execute it easily without being blocked by AV/EDR. Junkshell is a tool designed to encode your shellcode and execute it directly in memory by generating a Powershell script. The best part is the powershell script is different on each generation, so it's hard to detect.
 
