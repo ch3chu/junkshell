@@ -1,5 +1,21 @@
 ### Original: https://github.com/amauricio/junkshell
 
+
+## TODO:
+* Refactor code: `re.findall` and `replace` for variables, functions names, etc
+* Handle errors when executing shellcode (Exit func Thread?)
+* Change RWX to RW -> RX
+* Obfuscate more names/IOCs
+* Add more layers? (Ej: AES)
+* Improve junk shellcode: more random, more opcodes
+* handle both x86 and x64 shellcode
+
+### TODO Maybe:
+* Load EXE
+* Load DLL
+* Steager via URLs
+
+
 # 🗑️ Junkshell: powershell shellcode loader
 Sometimes, you need a fast way to encode your shellcode and execute it easily without being blocked by AV/EDR. Junkshell is a tool designed to encode your shellcode and execute it directly in memory by generating a Powershell script. The best part is the powershell script is different on each generation, so it's hard to detect.
 
