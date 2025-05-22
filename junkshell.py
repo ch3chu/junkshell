@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     if args.shellcode:
         builder = ShellcodeBuilder(args.shellcode, args.output)
-        builder.run()
+        builder.build()
     else:
         print("[!] You need to specify a shellcode or a pe file")
         sys.exit(0)

